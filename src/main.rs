@@ -90,15 +90,6 @@ async fn main(spawner: Spawner) {
         &clocks,
     );
 
-    let button = io.pins.gpio14.into_pull_down_input();
-
-    let machine_pin = io.pins.gpio12.into_pull_down_input();
-
-    let machine_is_on_led = io.pins.gpio17.into_push_pull_output();
-    let machine_is_off_led = io.pins.gpio16.into_push_pull_output();
-
-    let mut system_ready_pin = io.pins.gpio2.into_push_pull_output();
-
     let interface = I2CDisplayInterface::new(i2c);
 
     let display = make_static!(Mutex::new(
@@ -111,6 +102,17 @@ async fn main(spawner: Spawner) {
     let machine_state_signal: &'static Signal<CriticalSectionRawMutex, bool> =
         &*make_static!(Signal::new());
 
+    let button = io.pins.gpio14.into_pull_down_input();
+
+    let machine_pin = io.pins.gpio12.into_pull_down_input();
+
+    let machine_is_on_led = io.pins.gpio17.into_push_pull_output();
+    let machine_is_off_led = io.pins.gpio16.into_push_pull_output();
+
+    let mut board_state_pin = io.pins.gpio25.into_push_pull_output();
+
+    let mut system_ready_pin = io.pins.gpio2.into_push_pull_output();
+
     spawner
         .spawn(leds::control_machine_state(
             machine_is_on_led,
@@ -120,14 +122,16 @@ async fn main(spawner: Spawner) {
         .ok();
 
     // Setup default state of Esp32
-    display::show_rust_logo(display_controller).await;
-    Timer::after(Duration::from_secs(2)).await;
+    display::show_rust_logo(display_controller).await; // Show Rust logo
+    Timer::after(Duration::from_secs(2)).await; // Wait 2 seconds to show the board state
     display::change_board_mode(display_controller, BoardState::CNC).await; //Default mode on start esp32
-    machine_state_signal.signal(false); // Default state of led is green (false)
 
     system_ready_pin.set_high().unwrap();
+    println!("System ready!");
 
-    let mut board_state: bool = true; // CNC
+    let mut board_state: bool = false; // False = CNC (default mode), True = Roller
+    machine_state_signal.signal(board_state); // Default state of led is green (false), which means that the machine is off
+
     let mut old_button_state: bool = false;
     let mut old_machine_state: bool = false;
     loop {
@@ -141,13 +145,14 @@ async fn main(spawner: Spawner) {
         }
 
         if button_state != old_button_state && button_state {
-            println!("Button pressed!");
-
             if !machine_is_running {
                 board_state = !board_state;
+
+                board_state_pin.set_state(board_state.into()).unwrap();
+
                 match board_state {
-                    true => display::change_board_mode(display_controller, BoardState::CNC).await,
-                    false => {
+                    false => display::change_board_mode(display_controller, BoardState::CNC).await, //Default mode
+                    true => {
                         display::change_board_mode(display_controller, BoardState::Roller).await
                     }
                 }
