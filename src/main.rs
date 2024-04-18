@@ -1,34 +1,34 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+
+mod http_handler;
+mod wifi;
 extern crate alloc;
-use alloc::format;
 use core::mem::MaybeUninit;
 use embassy_executor::Spawner;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
+use embassy_net::{Config, Stack, StackResources};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use embedded_graphics::image::{Image, ImageRaw};
-
 use esp_backtrace as _;
-use esp_hal::i2c::I2C;
 use esp_hal::macros::main;
 use esp_hal::peripherals::I2C0;
-use esp_hal::prelude::{_embedded_hal_digital_v2_InputPin, _embedded_hal_digital_v2_OutputPin};
+use esp_wifi::wifi::WifiStaDevice;
+use esp_wifi::{initialize, EspWifiInitFor};
+use ssd1306::mode::BufferedGraphicsMode;
+
+use esp_hal::i2c::I2C;
+
+use esp_hal::prelude::_embedded_hal_digital_v2_OutputPin;
 use esp_hal::system::SystemExt;
 use esp_hal::timer::TimerGroup;
-use esp_hal::IO;
 use esp_hal::{
     clock::ClockControl, embassy, entry, peripherals::Peripherals, prelude::_fugit_RateExtU32,
 };
+use esp_hal::{Rng, IO};
 use esp_println::println;
 
-use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    text::{Baseline, Text},
-};
-use ssd1306::mode::BufferedGraphicsMode;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 use static_cell::make_static;
 #[global_allocator]
@@ -42,6 +42,28 @@ fn init_heap() {
         ALLOCATOR.init(HEAP.as_mut_ptr() as *mut u8, HEAP_SIZE);
     }
 }
+
+#[derive(Clone, Copy)]
+struct DisplayController(
+    &'static Mutex<
+        CriticalSectionRawMutex,
+        Ssd1306<
+            I2CInterface<I2C<'static, I2C0>>,
+            DisplaySize128x64,
+            BufferedGraphicsMode<DisplaySize128x64>,
+        >,
+    >,
+);
+
+struct AppState {
+    display: DisplayController,
+}
+impl picoserve::extract::FromRef<AppState> for DisplayController {
+    fn from_ref(state: &AppState) -> Self {
+        state.display
+    }
+}
+
 #[main]
 async fn main(spawner: Spawner) {
     init_heap();
@@ -51,9 +73,6 @@ async fn main(spawner: Spawner) {
     let peripherals = Peripherals::take();
     let system = peripherals.SYSTEM.split();
     let clocks = ClockControl::max(system.clock_control).freeze();
-
-    let timg0 = TimerGroup::new(peripherals.TIMG0, &clocks);
-    embassy::init(&clocks, timg0);
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
@@ -67,121 +86,77 @@ async fn main(spawner: Spawner) {
 
     let interface = I2CDisplayInterface::new(i2c);
 
-    let display =
-        make_static!(
-            Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-                .into_buffered_graphics_mode()
-        );
-
-    let board_state_signal: &'static Signal<CriticalSectionRawMutex, bool> =
-        &*make_static!(Signal::new());
-
-    let machine_state_signal: &'static Signal<CriticalSectionRawMutex, bool> =
-        &*make_static!(Signal::new());
-
-    let button = io.pins.gpio14.into_pull_down_input();
-
-    let machine_pin = io.pins.gpio12.into_pull_down_input();
-
     let mut system_ready_pin = io.pins.gpio2.into_push_pull_output();
 
+    let timer = TimerGroup::new(peripherals.TIMG1, &clocks).timer0;
+
+    let init = initialize(
+        EspWifiInitFor::Wifi,
+        timer,
+        Rng::new(peripherals.RNG),
+        system.radio_clock_control,
+        &clocks,
+    )
+    .unwrap();
+
+    let (wifi_interface, controller) =
+        esp_wifi::wifi::new_with_mode(&init, peripherals.WIFI, WifiStaDevice).unwrap();
+
+    let timg0 = TimerGroup::new(peripherals.TIMG0, &clocks);
+    embassy::init(&clocks, timg0);
+
+    let config = Config::dhcpv4(Default::default());
+
+    let seed = 1234; // very random, very secure seed
+
+    // Init network stack
+    let stack = &*make_static!(Stack::new(
+        wifi_interface,
+        config,
+        make_static!(StackResources::<3>::new()),
+        seed
+    ));
+
+    spawner.spawn(wifi::connection(controller)).ok();
+    spawner.spawn(wifi::net_task(&stack)).ok();
+
+    loop {
+        if stack.is_link_up() {
+            println!("Link up");
+            break;
+        }
+        Timer::after(Duration::from_millis(500)).await;
+    }
+
+    println!("Waiting to get IP address...");
+    loop {
+        if let Some(config) = stack.config_v4() {
+            println!("Got IP: {}", config.address);
+            break;
+        }
+        Timer::after(Duration::from_millis(500)).await;
+    }
+
+    let config = make_static!(picoserve::Config::new(picoserve::Timeouts {
+        start_read_request: Some(Duration::from_secs(5)),
+        read_request: Some(Duration::from_secs(1)),
+        write: Some(Duration::from_secs(1)),
+    })
+    .keep_connection_alive());
+
+    let display = DisplayController(make_static!(Mutex::new(
+        Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+            .into_buffered_graphics_mode()
+    )));
+
     spawner
-        .spawn(graphics(display, board_state_signal, machine_state_signal))
+        .spawn(http_handler::web_task(config, stack, AppState { display }))
         .ok();
 
     system_ready_pin.set_high().unwrap();
 
-    let mut old_button_state: bool = false;
-    let mut board_state: bool = false;
-
     loop {
-        let button_state = button.is_high().unwrap();
-        let machine_is_running = machine_pin.is_high().unwrap();
-
-        if button_state != old_button_state && button_state {
-            println!("Button pressed!");
-
-            if !machine_is_running {
-                board_state = !board_state;
-
-                board_state_signal.signal(board_state);
-            } else {
-                machine_state_signal.signal(true);
-            }
-        };
-
-        old_button_state = button_state;
-        Timer::after(Duration::from_millis(100)).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn graphics(
-    display: &'static mut Ssd1306<
-        I2CInterface<I2C<'static, I2C0>>,
-        DisplaySize128x64,
-        BufferedGraphicsMode<DisplaySize128x64>,
-    >,
-    control_board: &'static Signal<CriticalSectionRawMutex, bool>,
-    control_machine: &'static Signal<CriticalSectionRawMutex, bool>,
-) {
-    display.init().unwrap();
-
-    let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("./rust.raw"), 64);
-
-    let im = Image::new(&raw, Point::new(32, 0));
-
-    im.draw(display).unwrap();
-
-    display.flush().unwrap();
-
-    let text_style = MonoTextStyleBuilder::new()
-        .font(&FONT_6X10)
-        .text_color(BinaryColor::On)
-        .build();
-
-    let mut actual_machine_state = false; // CNC
-
-    loop {
-        if control_machine.signaled() {
-            // Check if machine is running (cannot change mode while machine is running)
-            display.clear(BinaryColor::Off).unwrap();
-
-            Text::with_baseline(
-                format!("Desligue a máquina!").as_str(),
-                Point::new(32, 32), // Centered text
-                text_style,
-                Baseline::Top,
-            )
-            .draw(display)
-            .unwrap();
-
-            display.flush().unwrap();
-        }
-
-        if control_board.signaled() && !control_machine.signaled() {
-            actual_machine_state = !actual_machine_state;
-
-            let mode_string = match actual_machine_state {
-                true => "Roller",
-                false => "CNC",
-            };
-
-            display.clear(BinaryColor::Off).unwrap();
-
-            Text::with_baseline(
-                format!("Modo: {mode_string}!").as_str(),
-                Point::new(32, 32),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(display)
-            .unwrap();
-
-            display.flush().unwrap();
-        }
-        control_machine.reset();
-        control_board.reset();
-        Timer::after(Duration::from_millis(300)).await;
+        println!("Online");
+        Timer::after(Duration::from_secs(5)).await;
     }
 }
