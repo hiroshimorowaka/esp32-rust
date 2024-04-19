@@ -1,9 +1,15 @@
 ## Tabela de conteúdos
 - [Tabela de conteúdos](#tabela-de-conteúdos)
 - [Introdução](#introdução)
-  - [Contribuindo](#contribuindo)
+- [Contribuindo](#contribuindo)
 - [Objetivo](#objetivo)
 - [Hardware e Abstrações](#hardware-e-abstrações)
+  - [Componentes usados](#componentes-usados)
+  - [Display](#display)
+  - [Botão de troca de estado](#botão-de-troca-de-estado)
+  - [Botão de teste](#botão-de-teste)
+  - [Leds](#leds)
+  - [Diagrama](#diagrama)
 - [Como rodar o projeto](#como-rodar-o-projeto)
   - [Requisitos globais](#requisitos-globais)
   - [WSL Only](#wsl-only)
@@ -18,14 +24,14 @@ Recentemente eu comprei um Esp32 (Mais especificamente o Esp32-wroom-32)
 
 Esse repositório é onde eu vou compartilhar as minhas experiências e o código que eu estou estudando nesse Esp32.
 
-### Contribuindo
-Como dito acima, eu sou iniciante em Rust e em embarcados, então ta sendo uma experiência muito legal e desafiadora pra mim. Com toda certeza meu código não está dos melhores e se alguém quiser contribuir com PR's será muito bem vindo.   
+## Contribuindo
 
-Como o objetivo do projeto é simples, acho difícil criar coisas novas, mas seria interessante dar uma polida no código tanto para eu aprender mais sobre Rust com o código de vocês, quanto pra quem tiver interesse em embarcados mas nunca mexeu, molhar os dedos nesse mundão incrível.
+Como dito acima, eu sou iniciante em Rust e em embarcados, então ta sendo uma experiência muito legal e desafiadora pra mim. Esse projeto é difícil contribuir com alguma coisa, mas eu criei ele pra vocês verem como eu construi o projeto e implementei as features.
 
-Aqui é um projeto aberto onde vocês podem contribuir com ele, criar um fork com suas próprias modificações e etc. 
+A melhor coisa que pode ser feita para contribuir com o projeto é polir o código e compartilhar conhecimento tanto sobre Rust quanto sobre embarcados, já que sou iniciante e meu código é de amador mesmo. Seria muito legal criar uma discussão sobre e eu ficaria muito grato se vocês se dispusessem a contribuir com o código, melhorando ele e detalhando essas melhorias pra gerar conhecimento.  
+Também é bom pra quem tiver interesse em embarcados mas nunca mexeu, molhar os dedos nesse mundão incrível.
 
-Nesse projeto tem uma branch de HTTP, onde eu implemento um servidor HTTP pra controlar o display do ESP, mas ainda ta incompleto, então seria MUITO legal se alguém quisesse contribuir com isso também (mesmo não sendo o objetivo principal do projeto, o importante é gerar conhecimento e aprender mais).
+Nesse projeto tem uma branch de HTTP, onde eu implemento um servidor HTTP pra controlar o display do ESP, mas ainda ta incompleto, então seria MUITO legal se alguém quisesse contribuir com isso também (mesmo não sendo o objetivo principal do projeto, o importante é gerar conhecimento e aprender mais, e com certeza isso será muito divertido).
 
 ## Objetivo
 
@@ -43,6 +49,51 @@ O projeto foi feito com no_std do Rust, ou seja, bare-metal -> sem sistema opera
 
 Pra montar a base do projeto, foi usado o [esp-template](https://github.com/esp-rs/esp-template), um template da comunidade de Rust pra criar um projeto pronto e funcionando com todas as crates necessárias pra utilizar a maioria das funcionalidades do Esp32 de forma abstraida.
 
+### Componentes usados
+- 2 (dois) push buttons comuns, com resistor de 1k
+- 1 (um) display SSD1306 (o que eu uso é LCD monocromático)
+- 2 (dois) leds com resistor de 1k, um vermelho e um verde. (mas tanto faz a cor)
+
+Meus botões são de dois pinos, mas caso o seu botão seja de quatro pinos, que é o mais comum, usem o diagrama que eu montei ali em baixo para se localizar melhor.
+
+### Display
+O display está ligado da seguinte forma:
+- VCC -> 5V
+- GND -> GND
+- SCL -> P22 (Pin 22/GPIO 22) (Por padrão, esse é o pino SCL do Esp32)
+- SDA -> P21 (Pin 21/GPIO 21) (Por padrão, esse é o pino SDA do Esp32)
+
+O artigo que eu usei pra montar o montar o display na placa foi esse aqui:   
+https://www.makerguides.com/how-to-connect-an-i2c-lcd-with-esp32/
+
+
+### Botão de troca de estado
+Ele está ligado da seguinte forma:
+- Terminal 1 -> 3V3 
+- Terminal 2 -> P14 (Pin 14/GPIO 14)
+
+### Botão de teste 
+Ele está ligado da seguinte forma:
+- Terminal 1 -> 3V3 
+- Terminal 2 -> P12 (Pin 12/GPIO 12)
+
+O botão de teste é usado só pra simular um estado de "maquina ligada" (botão pressionado), onde a troca de estados NÃO pode ocorrer, ou "máquina desligada" (botão solto), onde a troca pode sim ocorrer.
+
+### Leds
+Eles estão ligados da seguinte forma:  
+
+**LED VERDE**
+- Negativo do led -> GND
+- Positivo -> 16
+
+**LED VERMELHO**
+- Negativo do led -> GND
+- Positivo -> 17
+
+### Diagrama
+![Diagrama](https://i.imgur.com/uZdpMpl.png)
+
+
 ## Como rodar o projeto
 
 Eu rodo esse projeto dentro do WSL, então tudo que será ensinado aqui vale pra Linux nativo e WSL, dentro do Windows é praticamente a mesma coisa, só muda um passo extra.
@@ -54,7 +105,7 @@ https://www.rust-lang.org/pt-BR/learn/get-started
 
 Agora precisa instalar as dependências do cargo
 
-Cargo
+**Cargo**
 ```bash
 cargo install cargo-generate
 cargo install ldproxy
