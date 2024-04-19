@@ -91,7 +91,7 @@ Eles estão ligados da seguinte forma:
 - Positivo -> 17
 
 ### Diagrama
-![Diagrama](https://i.imgur.com/uZdpMpl.png)
+![Diagrama](https://i.imgur.com/ZSvztT1.png)
 
 
 ## Como rodar o projeto
