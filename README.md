@@ -136,9 +136,28 @@ Depois de instalado, vai aparecer um arquivo "export-esp.sh" na sua home, esse a
 Pra ativar ele no seu terminal, basta usar o seguinte comando:
 ```bash
 . $HOME/export-esp.sh
+```   
+É recomandado você colocar esse comando dentro da config do seu terminal para ele ser executado toda vez que um novo é aberto.
+
+
+Depois, você precisa se certificar que tem instalado o Python3.7 ou superior.
+
+Pra instalar ele, basta executar: 
+```bash
+# Debian/Ubuntu
+sudo apt install python3
+#Fedora 
+sudo dnf install python3
+# Arch 
+sudo pacman -Sy python3
 ```
 
-É recomandado você colocar esse comando dentro da config do seu terminal para ele ser executado toda vez que um novo é aberto.
+Pra verificar se o python está instalado no seu sistema, execute o seguinte comando:
+```bash
+python -V
+```
+
+Se aparecer a versão do python superior o 3.7, então está tudo certinho.
 
 ### WSL Only
 Agora se você usa o WSL como eu, você precisa de um passo extra. 
