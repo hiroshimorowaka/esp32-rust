@@ -6,9 +6,9 @@ use esp_wifi::wifi::{
     WifiState,
 };
 #[allow(dead_code)]
-const SSID: &str = "Netvizinho";
+const SSID: &str = env!("WIFI_SSID");
 #[allow(dead_code)]
-const PASSWORD: &str = "912171232020";
+const PASSWORD: &str = env!("WIFI_PASSWORD");
 
 #[embassy_executor::task]
 pub async fn connection(mut controller: WifiController<'static>) {

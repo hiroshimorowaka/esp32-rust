@@ -51,7 +51,7 @@ pub async fn web_task(
             )
             .route("/root", get(getroot))
             .route("/rust", get(show_rust_logo))
-            .route("/mode", get(change_mode));
+            .route("/mode", get(hello_word));
         match picoserve::serve_with_state(&app, &config, &mut [0; 2048], socket, &state).await {
             Ok(_) => {}
             Err(err) => log::error!("Web task error: {err:?}"),
@@ -72,7 +72,7 @@ async fn show_rust_logo(State(display): State<DisplayController>) -> impl IntoRe
     "Rust appeared!"
 }
 
-async fn change_mode(State(display): State<DisplayController>) -> impl IntoResponse {
+async fn hello_word(State(display): State<DisplayController>) -> impl IntoResponse {
     let mut dsp = display.0.lock().await;
     dsp.init().unwrap();
     let text_style = MonoTextStyleBuilder::new()
