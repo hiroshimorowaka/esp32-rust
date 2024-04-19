@@ -37,13 +37,13 @@ Nesse projeto tem uma branch de HTTP, onde eu implemento um servidor HTTP pra co
 
 Esse projeto ta sendo feito com o objetivo de integrar com um módulo eletrônico artesanal feito pelo meu pai. Esse módulo vai se integrar com máquinas de corte a laser, e caso haja energia em um pino, ele vai mudar o modo da máquina pra X, e caso não, pra Y, utilizando um relê.
 
-Então o código do Esp32 é bem simples, ele vai controlar esse estado, enviando ou não energia pra esse pino especifico com o apertar de um botão
+Então o código do Esp32 é bem simples, ele vai controlar esse estado, enviando ou não energia pra esse pino especifico com o apertar de um botão (no caso eu arbitrariamente defini como P25) 
 
 A única "regra de negócio" é que a ativação e desativação desse pino não pode ser feita caso a máquina a laser esteja ligada, ou seja, o estado do pino (ligado ou desligado) precisa ser mantido caso a máquina esteja ligada, mesmo que o botão seja pressionado.
 
 ## Hardware e Abstrações
 
-Nesse projeto, eu estou usando o Esp32, mais espeficiamente o Esp32-wroom-32 (NodeMCU Esp32S)
+Nesse projeto, eu estou usando o Esp32, mais especificamente o Esp32-wroom-32 (NodeMCU Esp32S)
 
 O projeto foi feito com no_std do Rust, ou seja, bare-metal -> sem sistema operacional rodando por baixo. 
 
@@ -84,11 +84,11 @@ Eles estão ligados da seguinte forma:
 
 **LED VERDE**
 - Negativo do led -> GND
-- Positivo -> 16
+- Positivo -> P16 (Pin 16/GPIO 16)
 
 **LED VERMELHO**
 - Negativo do led -> GND
-- Positivo -> 17
+- Positivo -> P17 (Pin 17/GPIO 17)
 
 ### Diagrama
 ![Diagrama](https://i.imgur.com/ZSvztT1.png)
@@ -176,6 +176,6 @@ Para abrir o monitor serial, use somente o seguinte comando:
 cargo espflash monitor
 ```
 
-O comando `flash` vai compilar seu projeto e jogar o código dentro do seu Esp32 pra ser executado, o comando `monitor` abre o monitor serial, e caso você queira fazer os dois ao mesmo tmepo, basta usar `cargo espflash flash --monitor`
+O comando `cargo espflash flash` vai compilar seu projeto e jogar o código dentro do seu Esp32 pra ser executado, o comando `cargo espflash monitor` abre o monitor serial, e caso você queira fazer os dois ao mesmo tmepo, basta rodar `cargo espflash flash --monitor`
 
 Vale a pena dar uma olhada na documentação do espflash caso tenham problemas ou interesse nos outros comandos: https://github.com/esp-rs/espflash/blob/main/cargo-espflash/README.md#usage
