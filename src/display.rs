@@ -55,7 +55,7 @@ pub async fn machine_is_on(display_controller: DisplayController) {
     dsp.init().unwrap();
 
     Text::with_baseline(
-        format!("Desligue a maquina!").as_str(),
+        "Desligue a maquina!",
         Point::new(10, 32), // Centered text
         text_style,
         Baseline::Top,
@@ -64,7 +64,7 @@ pub async fn machine_is_on(display_controller: DisplayController) {
     .unwrap();
 
     Text::with_baseline(
-        format!("E tente novamente!").as_str(),
+        "E tente novamente!",
         Point::new(10, 42), // Centered text
         text_style,
         Baseline::Top,

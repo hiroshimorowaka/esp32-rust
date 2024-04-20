@@ -7,6 +7,7 @@ mod leds;
 use core::fmt;
 use core::mem::MaybeUninit;
 
+use alloc::boxed::Box;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -28,7 +29,6 @@ use esp_println::println;
 
 use ssd1306::mode::BufferedGraphicsMode;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
-use static_cell::make_static;
 #[global_allocator]
 static ALLOCATOR: esp_alloc::EspHeap = esp_alloc::EspHeap::empty();
 
@@ -92,15 +92,15 @@ async fn main(spawner: Spawner) {
 
     let interface = I2CDisplayInterface::new(i2c);
 
-    let display = make_static!(Mutex::new(
+    let display = Box::leak(Box::new(Mutex::new(
         Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-            .into_buffered_graphics_mode()
-    ));
+            .into_buffered_graphics_mode(),
+    )));
 
     let display_controller = DisplayController(display);
 
     let machine_state_signal: &'static Signal<CriticalSectionRawMutex, bool> =
-        &*make_static!(Signal::new());
+        &*Box::leak(Box::new(Signal::new()));
 
     let button = io.pins.gpio14.into_pull_down_input();
 
