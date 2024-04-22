@@ -11,10 +11,10 @@ use alloc::boxed::Box;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
 
 use esp_backtrace as _;
+use esp_hal::gpio::{GpioPin, Input, PullDown};
 use esp_hal::i2c::I2C;
 use esp_hal::macros::main;
 use esp_hal::peripherals::I2C0;
@@ -58,6 +58,15 @@ pub enum BoardState {
     Roller,
 }
 
+impl From<bool> for BoardState {
+    fn from(value: bool) -> Self {
+        match value {
+            false => BoardState::CNC,
+            true => BoardState::Roller,
+        }
+    }
+}
+
 impl fmt::Display for BoardState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -99,12 +108,10 @@ async fn main(spawner: Spawner) {
 
     let display_controller = DisplayController(display);
 
-    let machine_state_signal: &'static Signal<CriticalSectionRawMutex, bool> =
-        &*Box::leak(Box::new(Signal::new()));
-
     let button = io.pins.gpio14.into_pull_down_input();
 
-    let machine_pin = io.pins.gpio12.into_pull_down_input();
+    let machine_pin: &'static GpioPin<Input<PullDown>, 12> =
+        &*Box::leak(Box::new(io.pins.gpio12.into_pull_down_input()));
 
     let machine_is_on_led = io.pins.gpio17.into_push_pull_output();
     let machine_is_off_led = io.pins.gpio16.into_push_pull_output();
@@ -117,7 +124,7 @@ async fn main(spawner: Spawner) {
         .spawn(leds::control_machine_state(
             machine_is_on_led,
             machine_is_off_led,
-            machine_state_signal,
+            machine_pin,
         ))
         .ok();
 
@@ -126,38 +133,25 @@ async fn main(spawner: Spawner) {
     Timer::after(Duration::from_secs(2)).await; // Wait 2 seconds to show the board state
     display::change_board_mode(display_controller, BoardState::CNC).await; //Default mode on start esp32
 
+    let mut board_state: bool = false; // False = CNC (default mode), True = Roller
+
     system_ready_pin.set_high().unwrap();
     println!("System ready!");
-
-    let mut board_state: bool = false; // False = CNC (default mode), True = Roller
-    machine_state_signal.signal(board_state); // Default state of led is green (false), which means that the machine is off
-
     let mut old_button_state: bool = false;
-    let mut old_machine_state: bool = false;
+
     loop {
         let button_state = button.is_high().unwrap();
         let machine_is_running = machine_pin.is_high().unwrap();
-
-        // Turn on or off led based on machine state
-        if machine_is_running != old_machine_state {
-            machine_state_signal.signal(machine_is_running);
-            old_machine_state = machine_is_running;
-        }
-
         if button_state != old_button_state && button_state {
             if !machine_is_running {
                 board_state = !board_state;
 
                 board_state_pin.set_state(board_state.into()).unwrap();
-
-                match board_state {
-                    false => display::change_board_mode(display_controller, BoardState::CNC).await, //Default mode
-                    true => {
-                        display::change_board_mode(display_controller, BoardState::Roller).await
-                    }
-                }
+                display::change_board_mode(display_controller, board_state.into()).await
             } else {
                 display::machine_is_on(display_controller).await;
+                Timer::after(Duration::from_secs(5)).await;
+                display::change_board_mode(display_controller, board_state.into()).await
             }
         };
 
